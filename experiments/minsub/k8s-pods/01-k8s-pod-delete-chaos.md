@@ -35,6 +35,11 @@ kubectl get nodes
 ```
 > kind 클러스터 생성 및 현재 context 확인 화면
 
+<p align="center">
+<img width="45%" height="664" alt="image" src="https://github.com/user-attachments/assets/94e06ee1-348b-4817-b008-9614cd3abe79" />
+<img width="45%" height="84" alt="image" src="https://github.com/user-attachments/assets/f3f2b2c0-0793-4fa5-b4c6-8728bbf76986" />
+</p>
+
 ---
 
 **실험용 YAML 작성**
@@ -105,6 +110,9 @@ kubectl get svc pod-chaos-demo-service
 ```
 > Deployment, ReplicaSet, Pod, Service 생성 확인 화면
 
+<img width="60%" height="766" alt="image" src="https://github.com/user-attachments/assets/7f658c0f-4109-423c-b2f6-0361cfe334d7" />
+
+
 Pod 관리 흐름은 다음과 같다.
 ```text
 Deployment
@@ -153,7 +161,10 @@ while true; do curl -s --connect-timeout 1 --max-time 2 http://pod-chaos-demo-se
 | `echo FAIL` | 요청 실패 시 `FAIL` 출력 |
 | `sleep 1` | 1초 간격으로 요청 |
 
-> 반복 요청에서 `OK`가 출력되는 화면
+> 반복 요청 출력되는 화면
+
+<img width="60%" height="724" alt="image" src="https://github.com/user-attachments/assets/6c552693-5135-4f42-8341-ed6bb8292712" />
+
 
 ### Pod 삭제
 다른 터미널에서 Pod 목록을 확인한다.
@@ -173,6 +184,9 @@ kubectl get pods -l app=pod-chaos-demo -w
 ```
 
 ### 관찰 결과
+
+<img width="60%" height="1016" alt="image" src="https://github.com/user-attachments/assets/166eaf97-9d57-4b75-b35e-3967677b8c26" />
+
 
 `replicas: 3` 상태에서는 Pod 하나를 삭제해도 반복 요청이 계속 `OK`로 유지되었다.
 
@@ -209,9 +223,12 @@ kubectl get pods -l app=pod-chaos-demo
 ```bash
 kubectl delete pod <pod-name>
 ```
-> 캡처 삽입: `replicas: 1` 상태에서 Pod 삭제 후 반복 요청 중 `FAIL`이 출력된 화면
+
 
 ### 관찰 결과
+
+<img width="60%" height="672" alt="image" src="https://github.com/user-attachments/assets/8a6ce968-650b-4354-bc23-38eaf0aec7df" />
+
 예상대로 중간에 `FAIL`이 발생했다.
 `replicas: 1` 상태의 흐름은 다음과 같다.
 
@@ -240,7 +257,6 @@ Pod 3 정상
 Service → Pod 2 또는 Pod 3으로 트래픽 전달
 ```
 ### 1-7. Case 비교
-조건	Pod 삭제 시 결과	해석
 
 | 조건            | Pod 삭제 시 결과      | 해석                          |
 | ------------- | ---------------- | --------------------------- |
