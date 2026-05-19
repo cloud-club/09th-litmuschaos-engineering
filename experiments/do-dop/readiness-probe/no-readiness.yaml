@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probe-demo-no-readiness
+  namespace: probe-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: probe-demo-no-readiness
+  template:
+    metadata:
+      labels:
+        app: probe-demo-no-readiness
+    spec:
+      containers:
+        - name: app
+          image: probe-demo:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-demo-no-readiness
+  namespace: probe-lab
+spec:
+  selector:
+    app: probe-demo-no-readiness
+  ports:
+    - port: 80
+      targetPort: 8080
