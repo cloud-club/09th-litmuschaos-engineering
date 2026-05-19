@@ -128,163 +128,7 @@ livenessProbe:
 
 ---
 
-### Scenario 4: 네트워크 지연 주입 (LitmusChaos)
-
-LitmusChaos의 `pod-network-latency` experiment로 network latency를 주입하고, Probe의 `timeoutSeconds` 설정이 적절한지 검증한다.  
-
-**가설**
-```
-네트워크 지연이 발생하면 readinessProbe가 실패하여
-해당 Pod는 트래픽 대상에서 제외되고,
-서비스 전체는 정상 응답을 유지할 것이다.
-```
-#### LitmusChaos Core Resources
-
-| CRD | 역할 |
-| --- | --- |
-| ChaosExperiment | Experiment template. 실행할 chaos 종류와 파라미터 기본값 정의 |
-| ChaosEngine | 대상 앱과 experiment를 연결하는 리소스. Chaos Operator가 이를 감지해 experiment 실행 |
-| ChaosResult | Experiment result 저장. `probeSuccessPercentage` 포함. Prometheus metric 내보내기 가능 |
-
-#### Installation
-
-```bash
-# Litmus Helm으로 설치
-helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/
-helm repo update
-kubectl create namespace litmus
-helm install litmus litmuschaos/litmus \
-  --namespace litmus \
-  --set portal.frontend.service.type=ClusterIP
-
-# Experiment CRD 설치(앱 namespace에)
-kubectl apply -f https://hub.litmuschaos.io/api/chaos/3.0.0?file=charts/generic/experiments.yaml \
-  -n default
-
-# 대상 앱에 chaos 허용 annotation 추가
-kubectl annotate deploy your-app litmuschaos.io/chaos="true" -n default
-```
-
-#### Step 1: ServiceAccount와 RBAC 생성
-
-```yaml
-# rbac.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: pod-network-latency-sa
-  namespace: default
-  labels:
-    name: pod-network-latency-sa
-    app.kubernetes.io/part-of: litmus
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: pod-network-latency-sa
-  namespace: default
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "events", "configmaps", "pods/log"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "deletecollection"]
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create", "list", "get", "delete", "deletecollection"]
-  - apiGroups: ["litmuschaos.io"]
-    resources: ["chaosengines", "chaosexperiments", "chaosresults"]
-    verbs: ["create", "list", "get", "patch", "update", "delete"]
-```
-
-#### Step 2:ChaosEngine - Network Latency 주입
-
-```yaml
-# chaosengine-network-latency.yaml
-apiVersion: litmuschaos.io/v1alpha1
-kind: ChaosEngine
-metadata:
-  name: probe-network-latency-test
-  namespace: default
-spec:
-  engineState: "active"
-  annotationCheck: "false"
-  appinfo:
-    appns: "default"
-    applabel: "app=your-app" # 대상 앱 레이블
-    appkind: "deployment"
-  chaosServiceAccount: pod-network-latency-sa
-  jobCleanUpPolicy: "delete"
-  experiments:
-    - name: pod-network-latency
-      spec:
-        components:
-          env:
-            - name: TARGET_CONTAINER
-              value: "your-app"
-            - name: NETWORK_INTERFACE
-              value: "eth0"
-            - name: NETWORK_LATENCY
-              value: "5000" # 5000ms = 5초 지연 주입
-            - name: TOTAL_CHAOS_DURATION
-              value: "60" # 60초 동안 experiment
-            - name: LIB_IMAGE
-              value: "litmuschaos/go-runner:latest"
-```
-
-#### Step 3: LitmusChaos httpProbe로 Hypothesis 검증
-
-ChaosEngine에 probe를 추가하면 experiment 중/후 steady state를 자동으로 검증할 수 있다. 이것이 Chaos Engineering의 가설 검증 단계에 해당한다.
-
-```yaml
-# ChaosEngine에 probe 섹션 추가
-experiments:
-  - name: pod-network-latency
-    spec:
-      probe:
-        - name: check-readiness-during-chaos
-          type: httpProbe
-          mode: Continuous # experiment 중 계속 체크
-          httpProbe/inputs:
-            url: http://your-app.default.svc:8080/ready
-            method:
-              get:
-                criteria: ==
-                responseCode: "200"
-          runProperties:
-            probeTimeout: 3s
-            interval: 2s
-            retry: 3
-```
-
-#### Step 4: Experiment 결과 확인
-
-```bash
-# Experiment 적용
-kubectl apply -f chaosengine-network-latency.yaml
-
-# Experiment 상태 모니터링
-kubectl get chaosengine probe-network-latency-test -n default -w
-
-# 결과 확인(ChaosResult)
-kubectl describe chaosresult probe-network-latency-test-pod-network-latency -n default
-
-# Experiment 즉시 중단
-kubectl patch chaosengine probe-network-latency-test -n default \
-  --type merge --patch '{"spec":{"engineState":"stop"}}'
-```
-
-#### Result Comparison by timeoutSeconds
-
-| `timeoutSeconds` 설정 | 5초 지연 주입 시 결과 | ChaosResult |
-| --- | --- | --- |
-| 1초(기본값) | Probe timeout, Failure, 불필요한 재시작 발생 | Fail(`probeSuccessPercentage` 낮음) |
-| 6초 | 지연은 감지하되 timeout 발생 안 함 | Pass |
-| 10초 | 여유롭게 통과하지만 실제 장애 감지가 느려짐 | Pass. 단, 감지 지연 주의 |
-
----
-
-### Scenario 5: Pod 강제 삭제 (LitmusChaos)
-
-`pod-delete` experiment로 Pod를 강제 종료했을 때 Readiness Probe가 트래픽을 정상 격리하는지 검증한다.  
+### Scenario 4: Pod 강제 삭제
 
 **가설**
 ```
@@ -292,39 +136,100 @@ Pod 하나가 삭제되어도 Deployment가 새 Pod를 생성하고,
 readinessProbe를 통과한 이후에만 트래픽을 수신할 것이다.
 ```
 
-**ChaosEngine**
-```yaml
-# chaosengine-pod-delete.yaml
-apiVersion: litmuschaos.io/v1alpha1
-kind: ChaosEngine
-metadata:
-  name: pod-delete-probe-test
-  namespace: default
-spec:
-  engineState: "active"
-  annotationCheck: "false"
-  appinfo:
-    appns: "default"
-    applabel: "app=your-app"
-    appkind: "deployment"
-  chaosServiceAccount: litmus-admin
-  experiments:
-    - name: pod-delete
-      spec:
-        components:
-          env:
-            - name: TOTAL_CHAOS_DURATION
-              value: "30" # 30초 동안 experiment
-            - name: CHAOS_INTERVAL
-              value: "10" # 10초마다 Pod 삭제
-            - name: FORCE
-              value: "false" # graceful termination
-            - name: PODS_AFFECTED_PERC
-              value: "50" # 전체 Pod의 50% 대상
+| 단계 | 행동 | 관찰 포인트 |
+| --- | --- | --- |
+| 1 | 3개 replica Deployment 배포, Readiness Probe 있음 | Pod 3개 `Running & Ready` 확인 |
+| 2 | Pod 1개 강제 삭제(`kubectl delete pod`) | 삭제된 Pod IP가 EndpointSlice에서 즉시 제거되는지 확인 |
+| 3 | 새 Pod가 뜨는 동안 트래픽 연속 전송 | 정상 Pod 2개에만 라우팅되는지, 에러 없는지 확인 |
+| 4 | 새 Pod가 Readiness 통과 후 트래픽 수신 | EndpointSlice에 IP 재추가 타이밍 확인 |
+| 5 | Probe 없는 버전과 비교 반복 | Probe 유무에 따른 에러율 차이 측정 |
+
+#### Go 앱
+
+```go
+// 앱 시작 후 30초 동안은 /ready 실패 -> 초기화 중임을 시뮬레이션
+var startTime = time.Now()
+
+func isReady() bool {
+    return time.Since(startTime) >= 30*time.Second
+}
+
+http.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+    if !isReady() {
+        w.WriteHeader(http.StatusServiceUnavailable) // 503: 아직 준비 안 됨
+        fmt.Fprintf(w, "not ready, pod=%s\n", os.Getenv("POD_NAME"))
+        return
+    }
+    w.WriteHeader(http.StatusOK) // 200: 준비 완료
+    fmt.Fprintf(w, "ready, pod=%s\n", os.Getenv("POD_NAME"))
+})
+
+http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    if !isReady() {
+        w.WriteHeader(http.StatusInternalServerError) // 500: 초기화 중 요청 수신
+        fmt.Fprintf(w, "app is initializing, pod=%s\n", os.Getenv("POD_NAME"))
+        return
+    }
+
+    fmt.Fprintf(w, "ok, pod=%s\n", os.Getenv("POD_NAME")) // 어느 Pod가 응답했는지 확인용
+})
 ```
 
-> **Observation Points**
->
-> - Pod 삭제 직후 Readiness Probe 실패로 Service EndpointSlice에서 제외되는지 확인
-> - 새 Pod가 뜨는 동안 트래픽이 정상 Pod에만 라우팅되는지 확인
-> - ChaosResult의 `probeSuccessPercentage`로 서비스 가용성 측정
+#### Kubernetes Manifest
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 3
+  periodSeconds: 3
+  failureThreshold: 10 # 최대 30초 대기 후 트래픽 수신
+```
+
+#### 실험 스크립트
+
+**터미널 1 - Pod 상태 감시**
+
+```bash
+watch -n 1 kubectl get pods -l app=probe-test -o wide
+```
+
+**터미널 2 - EndpointSlice 감시**
+
+```bash
+# IP가 제거/추가되는 타이밍을 직접 눈으로 확인
+watch -n 1 kubectl get endpointslices \
+  -l kubernetes.io/service-name=probe-test-svc -o yaml \
+  | grep -E "addresses|ready"
+```
+
+**터미널 3 - 트래픽 연속 발사**
+
+```bash
+# 에러율 + 어느 Pod가 응답하는지 동시에 확인
+while true; do
+  curl -s http://<CLUSTER-IP>/ && sleep 0.3
+done
+```
+
+**터미널 4 - 혼돈 주입**
+
+```bash
+# 실험 1: Pod 1개 삭제(graceful)
+kubectl delete pod <pod-name>
+
+# 실험 2: 전체의 50% 동시 삭제
+PODS=($(kubectl get pods -l app=probe-test -o name))
+for pod in "${PODS[@]:0:$((${#PODS[@]}/2))}"; do
+  kubectl delete $pod &
+done
+wait
+```
+
+#### 결과 비교
+
+| 조건 | Pod 삭제 직후 에러 | 새 Pod Ready 전 에러 |
+| --- | --- | --- |
+| Readiness Probe **없음** | 없음(Pod가 바로 EndpointSlice 등록) | **에러 발생**(초기화 중에 트래픽 수신) |
+| Readiness Probe **있음** | 없음(삭제 즉시 제외) | **에러 없음**(Ready 통과 후에만 등록) |

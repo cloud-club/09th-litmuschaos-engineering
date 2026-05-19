@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probe-test-with-readiness
+  namespace: probe-lab
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: probe-test
+      version: with-readiness
+  template:
+    metadata:
+      labels:
+        app: probe-test
+        version: with-readiness
+    spec:
+      containers:
+        - name: app
+          image: probe-test:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            failureThreshold: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-test-svc
+  namespace: probe-lab
+spec:
+  selector:
+    app: probe-test
+    version: with-readiness
+  ports:
+    - port: 80
+      targetPort: 8080
