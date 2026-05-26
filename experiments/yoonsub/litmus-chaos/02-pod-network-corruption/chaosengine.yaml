@@ -1,0 +1,33 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-network-corruption-engine
+  namespace: default
+spec:
+  appinfo:
+    appns: default
+    applabel: "app=chaos-target"
+    appkind: deployment
+  chaosServiceAccount: pod-network-corruption-sa
+  monitoring: false
+  jobCleanUpPolicy: delete
+  experiments:
+    - name: pod-network-corruption
+      spec:
+        components:
+          env:
+            # 카오스 지속 시간 (초)
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            # 패킷 손상 비율 (%)
+            - name: NETWORK_PACKET_CORRUPTION_PERCENTAGE
+              value: "100"
+            # 네트워크 인터페이스
+            - name: NETWORK_INTERFACE
+              value: "eth0"
+            # minikube 컨테이너 런타임
+            - name: CONTAINER_RUNTIME
+              value: "containerd"
+            # containerd 소켓 경로
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"

@@ -1,0 +1,33 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: pod-io-stress-engine
+  namespace: default
+spec:
+  appinfo:
+    appns: default
+    applabel: "app=chaos-target"
+    appkind: deployment
+  chaosServiceAccount: pod-io-stress-sa
+  monitoring: false
+  jobCleanUpPolicy: delete
+  experiments:
+    - name: pod-io-stress
+      spec:
+        components:
+          env:
+            # 카오스 지속 시간 (초)
+            - name: TOTAL_CHAOS_DURATION
+              value: "120"
+            # 사용 가능한 디스크 공간의 사용 비율 (%)
+            - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+              value: "10"
+            # I/O 부하를 발생시킬 워커 수
+            - name: NUMBER_OF_WORKERS
+              value: "4"
+            # minikube 컨테이너 런타임
+            - name: CONTAINER_RUNTIME
+              value: "containerd"
+            # containerd 소켓 경로
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"
