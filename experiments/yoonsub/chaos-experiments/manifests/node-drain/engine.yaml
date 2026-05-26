@@ -1,0 +1,24 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: nginx-node-drain
+  namespace: default
+spec:
+  engineState: "active"
+  annotationCheck: "false"
+  chaosServiceAccount: node-drain-sa
+  jobCleanUpPolicy: retain   # 실험 후 Job 유지 (로그 확인용)
+  experiments:
+    - name: node-drain
+      spec:
+        components:
+          env:
+            # 대상 노드: 2번째 워커 노드 (minikube --nodes 2로 생성 시 이름)
+            # 실제 노드 이름 확인: kubectl get nodes
+            - name: TARGET_NODE
+              value: "minikube-m02"
+            # 카오스 지속 시간 (초) — 이후 노드는 uncordon됨
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: RAMP_TIME
+              value: "0"

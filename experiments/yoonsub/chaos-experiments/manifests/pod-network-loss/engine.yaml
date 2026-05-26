@@ -1,0 +1,38 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: nginx-pod-network-loss
+  namespace: default
+spec:
+  appinfo:
+    appns: "default"
+    applabel: "app=nginx-target"
+    appkind: "deployment"
+  engineState: "active"
+  annotationCheck: "false"
+  chaosServiceAccount: pod-network-loss-sa
+  jobCleanUpPolicy: retain   # 실험 후 Job 유지 (로그 확인용)
+  experiments:
+    - name: pod-network-loss
+      spec:
+        components:
+          env:
+            # 패킷 손실 비율 (100 = 완전 차단)
+            - name: NETWORK_PACKET_LOSS_PERCENTAGE
+              value: "100"
+            # 카오스 지속 시간 (초)
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            # 영향받는 Pod 비율 (0 = 모두, 50 = 절반)
+            - name: PODS_AFFECTED_PERC
+              value: "50"
+            # minikube 기본 컨테이너 런타임
+            - name: CONTAINER_RUNTIME
+              value: "containerd"
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"
+            # 차단할 목적지 IP (빈 값 = 모든 트래픽 차단)
+            - name: DESTINATION_IPS
+              value: ""
+            - name: DESTINATION_HOSTS
+              value: ""
