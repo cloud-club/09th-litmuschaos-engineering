@@ -1,7 +1,7 @@
 ## 3. Resource Chaos
 
 ### 3-1. 실험 목적
-Pod가 Memory limit을 초과했을 때 어떤 상태 변화가 발생하는지 확인한다.
+> Pod가 Memory limit을 초과했을 때 어떤 상태 변화가 발생하는지 확인하고자 한다.
 
 ### 3-2. 배경 개념
 Kubernetes에서는 컨테이너별로 resource requests와 limits를 설정할 수 있다.
@@ -76,6 +76,9 @@ Pod 상태를 관찰한다.
 kubectl get pod memory-chaos-demo -w
 ```
 > `memory-chaos-demo` Pod 상태 변화 화면
+
+<img width="70%" height="368" alt="image" src="https://github.com/user-attachments/assets/18e819a7-a33b-46f3-9c1f-c3a2dc1f2f92" />
+
 ---
 
 ### 원인 확인
@@ -88,9 +91,14 @@ Reason: OOMKilled
 Exit Code: 137
 Restart Count 증가
 ```
+
 `Exit Code 137`은 일반적으로 프로세스가 `SIGKILL`로 종료되었을 때 나타난다.  
 이 실험에서는 메모리 초과로 인해 커널 또는 컨테이너 런타임에 의해 프로세스가 강제 종료된 상황으로 해석할 수 있다.
+
 > `kubectl describe pod`에서 `OOMKilled`, `Exit Code: 137` 확인 화면
+
+ <img width="60%" height="368" alt="image" src="https://github.com/user-attachments/assets/58bc3829-283a-4ba9-aed9-40c0fc460942" />
+
 ---
 
 ### 로그 확인
@@ -125,6 +133,9 @@ memory-chaos-demo   0/1     OOMKilled   10 (6m13s ago)   28m
 
 또한 `RESTARTS` 값이 10으로 증가한 것을 통해, 컨테이너가 종료된 뒤에도 `restartPolicy`에 따라 반복적으로 재시작되었음을 확인했다.
 > `kubectl get pod memory-chaos-demo`에서 `OOMKilled`, `RESTARTS` 확인 화면
+
+<img width="60%" height="148" alt="image" src="https://github.com/user-attachments/assets/2207c529-66ff-4cd5-abe5-29c15247524b" />
+
 
 ## 3-5. 결론
 > Memory Chaos 실험을 통해 컨테이너가 설정된 memory limit을 초과하면 `OOMKilled`가 발생하고, 컨테이너가 강제 종료될 수 있음을 확인했다.
