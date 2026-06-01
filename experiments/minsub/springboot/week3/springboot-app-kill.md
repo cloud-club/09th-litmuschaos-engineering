@@ -2,6 +2,12 @@
 
 ## 1. 실험 배경
 
+<p align="center">
+  <img width="60%" height="700" alt="image" src="https://github.com/user-attachments/assets/cafc6c2e-8185-4609-a4ee-842414875bcb" />
+</p>
+
+
+
 이번 실험은 2026 AWS Summit Seoul에서 들은 KB국민은행 KBaaS 사례를 바탕으로, Kubernetes 환경에서 Spring Boot 애플리케이션이 종료되는 상황을 카오스 엔지니어링 관점에서 검증하기 위해 진행했다.
 
 KBaaS 사례에서 인상 깊었던 부분은 다음과 같다.
@@ -281,7 +287,9 @@ kubectl run curl-test --image=curlimages/curl -it --rm -- sh
 ```
 
 curl-test 내부에서 호출
-(결과)
+
+<img width="60%" height="724" alt="image" src="https://github.com/user-attachments/assets/3ec61efc-9ad5-421b-8d93-a2af6c833f6f" />
+
 
 Spring Boot 애플리케이션과 Service 연결은 정상 동작 확인
 
@@ -387,8 +395,10 @@ ChaosEngine 적용:
 kubectl apply -f spring-boot-app-kill-chaosengine.yaml
 ```
 ---
+
 ## 13. 실험 실행 과정
 ChaosEngine 적용 후 Runner Pod와 Experiment Pod가 생성되었다.
+
 ```text
 kubectl get pods
 
@@ -403,21 +413,24 @@ kubectl get chaosresult
 spring-boot-app-kill-chaos-spring-boot-app-kill
 ```
 즉, LitmusChaos가 ChaosEngine을 감지하고, 실제 실험 Pod를 실행하는 단계까지는 성공했다.
+
 ---
 ## 14. 실험 결과
+
 실험 Pod 로그를 확인했다.
 ```text
 kubectl logs spring-boot-app-kill-zuuzai-wkgp8
 ```
 
 주요 로그는 다음과 같았다.
+
 ```text
 [PreCheck]: Target pods list for chaos, [spring-boot-demo-698794f6bc-n8vlg]
 [PreCheck]: Checking for ChaosMonkey endpoint in target pods
 [Check]: Checking pod: spring-boot-demo-698794f6bc-n8vlg (endpoint: http://10.244.0.17:8080/actuator/chaosmonkey)
 failed to get chaos monkey endpoint on pod spring-boot-demo-698794f6bc-n8vlg (status: 404)
 ```
-ChaosReulst도 다음처럼 `Error`로 기록되었다..
+ChaosResult도 다음처럼 `Error`로 기록되었다..
 
 ```text
 kubectl describe chaosresult spring-boot-app-kill-chaos-spring-boot-app-kill
@@ -432,6 +445,11 @@ Litmus App Kill 실험에서 Spring Boot Pod를 찾고, 실험 Pod를 실행하�
 ---
 
 ## 15. 원인 분석
+
+<p align="center">
+  <img width="50%" height="50%" alt="image" src="https://github.com/user-attachments/assets/6da34f67-206f-4ea0-b999-ba468e80e37a" />
+</p>
+
 현재 프로젝트는 다음 조합을 사용하고 있다.
 
 ```text
