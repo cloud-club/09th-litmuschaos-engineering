@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: litmus-lease-role
+  namespace: litmus
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: litmus-lease-rolebinding
+  namespace: litmus
+subjects:
+  - kind: ServiceAccount
+    name: litmus
+    namespace: litmus
+roleRef:
+  kind: Role
+  name: litmus-lease-role
+  apiGroup: rbac.authorization.k8s.io
