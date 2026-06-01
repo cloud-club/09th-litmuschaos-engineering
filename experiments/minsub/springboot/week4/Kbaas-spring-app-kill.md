@@ -91,7 +91,402 @@ replicas: 2
 
 ---
 
-## 5. Spring Boot 애플리케이션 구성
+
+## 5. 실험에 사용한 Manifest 파일 역할
+
+이번 실험에서는 Spring Boot 애플리케이션을 배포하는 파일과 LitmusChaos 실험을 실행하기 위한 RBAC/ChaosEngine 파일을 함께 사용했다.
+
+전체 역할은 다음과 같이 나눌 수 있다.
+
+```text
+1. Spring Boot 앱 배포 파일
+   → 실험 대상 애플리케이션과 Service 생성
+
+2. Litmus Operator 권한 파일
+   → ChaosEngine을 감지하고 실험 Runner Pod를 생성할 수 있도록 권한 부여
+
+3. Spring Boot App Kill 실험 권한 파일
+   → 실제 실험 Pod가 대상 Pod와 ReplicaSet을 조회하고 ChaosResult를 기록할 수 있도록 권한 부여
+
+4. ChaosEngine 파일
+   → 어떤 대상에 어떤 실험을 실행할지 선언
+```
+
+---
+
+### 5-1. `spring-boot-demo.yaml`
+
+`spring-boot-demo.yaml`은 실험 대상 Spring Boot 애플리케이션을 Kubernetes에 배포하는 파일이다.
+
+이 파일은 크게 `Deployment`와 `Service`로 구성된다.
+
+```text
+Deployment
+→ Spring Boot Pod 2개 유지
+
+Service
+→ Pod IP가 바뀌어도 고정된 이름으로 접근 가능하게 함
+```
+
+Deployment의 핵심 설정은 다음과 같다.
+
+```yaml
+replicas: 2
+```
+
+이는 Spring Boot Pod를 항상 2개 유지하겠다는 의미다.  
+따라서 App Kill로 하나의 Pod 안에서 컨테이너가 재시작되더라도, 다른 Pod가 계속 트래픽을 처리할 수 있다.
+
+```yaml
+labels:
+  app: spring-boot-demo
+```
+
+이 라벨은 Service와 LitmusChaos가 대상 Pod를 찾는 기준으로 사용된다.
+
+Service는 다음 selector를 통해 Spring Boot Pod로 트래픽을 전달한다.
+
+```yaml
+selector:
+  app: spring-boot-demo
+```
+
+ChaosEngine 역시 같은 라벨을 사용해 실험 대상을 지정한다.
+
+```yaml
+applabel: "app=spring-boot-demo"
+```
+
+또한 다음 설정을 통해 Pod 종료 시 Kubernetes가 강제 종료 전에 최대 30초까지 기다릴 수 있도록 했다.
+
+```yaml
+terminationGracePeriodSeconds: 30
+```
+
+다만 이번 `spring-boot-app-kill` 실험은 Pod 자체를 삭제하는 것이 아니라 Pod 내부의 Spring Boot 프로세스를 종료시키는 실험에 가까우므로, 직접적인 관찰 지표는 Pod 이름 변경이 아니라 `RESTARTS` 증가였다.
+
+정리하면 `spring-boot-demo.yaml`은 다음 역할을 한다.
+
+```text
+Spring Boot 앱을 Pod 2개로 배포하고,
+ClusterIP Service를 통해 클러스터 내부에서 접근할 수 있게 하는 실험 대상 구성 파일
+```
+
+---
+
+### 5-2. `spring-boot-app-kill-chaosengine.yaml`
+
+`spring-boot-app-kill-chaosengine.yaml`은 LitmusChaos에게 어떤 실험을 어떤 대상에 실행할지 알려주는 핵심 파일이다.
+
+```yaml
+kind: ChaosEngine
+metadata:
+  name: spring-boot-app-kill-chaos
+```
+
+`ChaosEngine`은 LitmusChaos에서 실험 실행 의도를 선언하는 리소스다.
+
+쉽게 말하면 다음과 같은 지시를 Kubernetes 리소스로 표현한 것이다.
+
+```text
+Litmus야,
+default namespace에 있는 app=spring-boot-demo Deployment에
+spring-boot-app-kill 실험을 실행해줘.
+```
+
+핵심 설정은 다음과 같다.
+
+```yaml
+engineState: active
+```
+
+실험을 활성화한다는 의미다.  
+`active` 상태여야 Litmus Operator가 이 ChaosEngine을 감지하고 실험 Runner Pod를 생성한다.
+
+```yaml
+annotationCheck: "false"
+```
+
+대상 애플리케이션에 Litmus용 annotation이 없어도 실험을 실행하겠다는 의미다.
+
+```yaml
+appinfo:
+  appns: default
+  applabel: "app=spring-boot-demo"
+  appkind: deployment
+```
+
+실험 대상을 지정하는 부분이다.
+
+| 항목 | 의미 |
+| --- | --- |
+| `appns` | 대상 애플리케이션이 있는 namespace |
+| `applabel` | 대상 Pod를 찾기 위한 label |
+| `appkind` | 대상 애플리케이션의 Workload 종류 |
+
+실제 실험 로그에서도 Litmus가 이 설정을 기반으로 대상 Pod를 찾았다.
+
+```text
+Target pods list for chaos, [spring-boot-demo-5ff77f5cb-z6brf]
+```
+
+```yaml
+chaosServiceAccount: spring-boot-app-kill-sa
+```
+
+실제 실험 Pod가 사용할 ServiceAccount를 지정한다.  
+따라서 `spring-boot-app-kill-sa`에는 대상 Pod 조회, ReplicaSet 조회, ChaosResult 업데이트 등에 필요한 권한이 있어야 한다.
+
+```yaml
+jobCleanUpPolicy: retain
+```
+
+실험 종료 후 Runner/Experiment Pod를 바로 삭제하지 않고 남겨두겠다는 의미다.  
+이번 실험에서는 이 설정 덕분에 실험 Pod 로그를 확인할 수 있었다.
+
+실험 환경 변수의 의미는 다음과 같다.
+
+| 설정 | 의미 |
+| --- | --- |
+| `CM_PORT: "8080"` | Spring Boot 애플리케이션 포트 |
+| `CM_LEVEL: "1"` | Chaos Monkey fault 발생 수준 |
+| `CM_WATCHERS: "restController"` | `@RestController` 계층에 fault 주입 |
+| `PODS_AFFECTED_PERC: "50"` | 대상 Pod 중 50%에 장애 주입 |
+| `SEQUENCE: "serial"` | 여러 Pod 대상 시 순차적으로 실험 실행 |
+
+이번 실험에서는 Spring Boot Pod가 2개였고 `PODS_AFFECTED_PERC`가 50이었기 때문에, 실제로 1개의 Pod가 실험 대상으로 선택되었다.
+
+정리하면 `spring-boot-app-kill-chaosengine.yaml`은 다음 역할을 한다.
+
+```text
+spring-boot-demo Deployment를 대상으로
+spring-boot-app-kill 실험을 실행하도록 LitmusChaos에 지시하는 실험 정의 파일
+```
+
+---
+
+### 5-3. `spring-boot-app-kill-sa.yaml`
+
+`spring-boot-app-kill-sa.yaml`은 실제 `spring-boot-app-kill` 실험 Pod가 사용할 ServiceAccount와 기본 권한을 정의하는 파일이다.
+
+```yaml
+kind: ServiceAccount
+metadata:
+  name: spring-boot-app-kill-sa
+  namespace: default
+```
+
+이 ServiceAccount는 ChaosEngine에서 다음과 같이 참조된다.
+
+```yaml
+chaosServiceAccount: spring-boot-app-kill-sa
+```
+
+즉, 실제 실험 Pod는 `spring-boot-app-kill-sa` 권한으로 Kubernetes API를 호출한다.
+
+실험 Pod는 다음 작업을 수행해야 한다.
+
+```text
+대상 Pod 조회
+Pod 로그/이벤트 확인
+실험 Job 생성 및 상태 확인
+ChaosEngine/ChaosExperiment/ChaosResult 조회 및 업데이트
+```
+
+이를 위해 다음 권한을 부여했다.
+
+| 리소스 | 역할 |
+| --- | --- |
+| `pods` | 대상 Pod 조회 |
+| `pods/log` | Pod 로그 조회 |
+| `pods/exec` | 필요 시 Pod 내부 명령 실행 |
+| `events` | 실험 관련 이벤트 기록 |
+| `jobs` | 실험 Job 생성/조회/삭제 |
+| `chaosengines` | ChaosEngine 조회 및 업데이트 |
+| `chaosexperiments` | 실험 정의 조회 |
+| `chaosresults` | 실험 결과 생성 및 업데이트 |
+
+정리하면 `spring-boot-app-kill-sa.yaml`은 다음 역할을 한다.
+
+```text
+실제 spring-boot-app-kill 실험 Pod가 default namespace에서
+Pod, Job, ChaosResult 등을 다룰 수 있도록 권한을 부여하는 파일
+```
+
+---
+
+### 5-4. `spring-boot-app-kill-apps-extra-role.yaml`
+
+`spring-boot-app-kill-apps-extra-role.yaml`은 `spring-boot-app-kill-sa`에 추가로 apps 리소스 조회 권한을 부여하기 위해 만든 파일이다.
+
+처음 실험을 실행했을 때 다음 오류가 발생했다.
+
+```text
+replicasets.apps "spring-boot-demo-698794f6bc" is forbidden:
+User "system:serviceaccount:default:spring-boot-app-kill-sa"
+cannot get resource "replicasets" in API group "apps"
+```
+
+이 오류는 실험 Pod가 대상 Pod의 상위 리소스를 확인하는 과정에서 발생했다.
+
+Kubernetes에서 Deployment가 Pod를 관리하는 구조는 다음과 같다.
+
+```text
+Deployment
+  ↓
+ReplicaSet
+  ↓
+Pod
+```
+
+Litmus는 대상 Pod를 찾은 뒤, 이 Pod가 어떤 상위 리소스에 의해 관리되는지 확인하려고 ReplicaSet을 조회한다.  
+그런데 기존 `spring-boot-app-kill-sa`에는 `replicasets` 조회 권한이 없어 실험이 실패했다.
+
+이를 해결하기 위해 다음 리소스에 대한 권한을 추가했다.
+
+```yaml
+apiGroups: ["apps"]
+resources:
+  - deployments
+  - replicasets
+  - statefulsets
+  - daemonsets
+```
+
+정리하면 이 파일은 다음 역할을 한다.
+
+```text
+spring-boot-app-kill 실험 Pod가 대상 Pod의 상위 리소스인
+ReplicaSet/Deployment를 조회할 수 있도록 추가 권한을 부여하는 파일
+```
+
+---
+
+### 5-5. `litmus-lease-role.yaml`
+
+`litmus-lease-role.yaml`은 Litmus Operator가 leader election을 수행할 수 있도록 `leases` 권한을 부여하는 파일이다.
+
+Litmus Operator는 Kubernetes Operator이므로 leader election 과정을 수행한다.  
+이는 여러 Operator 인스턴스가 있을 때 하나의 인스턴스만 실제 작업을 수행하도록 lock을 잡는 구조다.
+
+이때 Kubernetes의 `Lease` 리소스가 사용된다.
+
+처음에는 다음 오류가 발생했다.
+
+```text
+leases.coordination.k8s.io "chaos-operator.lock" is forbidden
+```
+
+즉, `litmus` ServiceAccount가 `leases` 리소스를 조회하거나 생성할 권한이 없어 leader election에 실패한 것이다.
+
+이를 해결하기 위해 `litmus` namespace에서 `leases`를 다룰 수 있는 Role을 만들고, 이를 `litmus` ServiceAccount에 연결했다.
+
+정리하면 이 파일은 다음 역할을 한다.
+
+```text
+Litmus Operator가 chaos-operator.lock Lease를 획득하고
+정상적으로 leader election을 완료할 수 있도록 권한을 부여하는 파일
+```
+
+이후 Operator 로그에서 다음과 같은 정상 흐름을 확인했다.
+
+```text
+successfully acquired lease litmus/chaos-operator.lock
+```
+
+---
+
+### 5-6. `litmus-operator-cluster-role.yaml`
+
+`litmus-operator-cluster-role.yaml`은 Litmus Operator가 클러스터 범위에서 ChaosEngine, Pod, Job 등을 감시하고 관리할 수 있도록 권한을 부여하는 파일이다.
+
+`litmus-lease-role.yaml`은 `litmus` namespace 안에서 `leases`를 다루기 위한 Role이었다.  
+하지만 이번 실험에서 Litmus Operator와 실험 대상 리소스는 서로 다른 namespace에 있었다.
+
+```text
+Litmus Operator: litmus namespace
+Spring Boot 앱: default namespace
+ChaosEngine: default namespace
+```
+
+따라서 Litmus Operator가 `default` namespace의 ChaosEngine과 Pod를 감시하려면 namespace 범위를 넘어서는 권한이 필요했다.
+
+이 권한이 없을 때 다음 오류가 발생했다.
+
+```text
+pods is forbidden:
+User "system:serviceaccount:litmus:litmus" cannot list resource "pods" at the cluster scope
+
+chaosengines.litmuschaos.io is forbidden:
+User "system:serviceaccount:litmus:litmus" cannot list resource "chaosengines" at the cluster scope
+```
+
+이를 해결하기 위해 `ClusterRole`과 `ClusterRoleBinding`을 사용했다.
+
+주요 권한은 다음과 같다.
+
+| 리소스 | 역할 |
+| --- | --- |
+| `pods`, `pods/log`, `pods/exec` | 대상 Pod 및 로그/exec 관련 작업 |
+| `events` | 실험 이벤트 기록 |
+| `services`, `configmaps`, `secrets` | 실험 실행에 필요한 기본 리소스 조회/수정 |
+| `deployments`, `replicasets` | 대상 Workload 구조 파악 |
+| `jobs` | Runner/Experiment Job 생성 및 관리 |
+| `chaosengines` | ChaosEngine 감시 |
+| `chaosexperiments` | 실험 정의 조회 |
+| `chaosresults` | 실험 결과 관리 |
+| `leases` | leader election 수행 |
+
+정리하면 이 파일은 다음 역할을 한다.
+
+```text
+Litmus Operator가 namespace를 넘어 ChaosEngine을 감시하고,
+대상 Pod를 식별하며, 실험 Runner Pod를 생성할 수 있도록
+클러스터 범위 권한을 부여하는 파일
+```
+
+---
+
+### 5-7. ServiceAccount 역할 구분
+
+이번 실험에서 헷갈리기 쉬운 부분은 `litmus` ServiceAccount와 `spring-boot-app-kill-sa` ServiceAccount의 역할 차이다.
+
+| ServiceAccount | Namespace | 사용하는 주체 | 역할 |
+| --- | --- | --- | --- |
+| `litmus` | `litmus` | Litmus Operator | ChaosEngine 감시, Runner Pod 생성 |
+| `spring-boot-app-kill-sa` | `default` | spring-boot-app-kill 실험 Pod | 대상 Pod 조회, Chaos Monkey API 호출, ChaosResult 업데이트 |
+
+즉, 두 계정은 역할이 다르다.
+
+```text
+Operator 권한 문제
+→ ChaosEngine을 감지하지 못하거나 Runner Pod를 생성하지 못함
+
+Experiment 권한 문제
+→ Runner Pod는 생성되지만 대상 Pod 조회나 실험 실행 중 실패함
+```
+
+이번 실험에서 발생한 문제도 이 순서로 정리할 수 있다.
+
+```text
+Operator 권한 부족
+→ Job/ChaosResult가 생성되지 않음
+
+Experiment 권한 부족
+→ ReplicaSet 조회 실패
+
+Spring Boot 앱 설정 문제
+→ /actuator/chaosmonkey 404
+
+최종 해결 후
+→ App Kill 실행
+→ 대상 Pod RESTARTS 증가
+```
+
+---
+
+
+## 6. Spring Boot 애플리케이션 구성
 
 실험용 Spring Boot 애플리케이션에는 간단한 health check API와 결제 API를 구성했다.
 
@@ -115,7 +510,7 @@ public class PaymentController {
 
 ---
 
-## 6. Kubernetes Deployment / Service
+## 7. Kubernetes Deployment / Service
 
 Spring Boot 앱은 Deployment와 ClusterIP Service로 배포했다.
 
@@ -182,7 +577,7 @@ spring-boot-demo-5ff77f5cb-z6brf   1/1   Running   0
 
 ---
 
-## 7. Chaos Monkey endpoint 확인
+## 8. Chaos Monkey endpoint 확인
 
 LitmusChaos의 `spring-boot-app-kill` 실험은 대상 Spring Boot 애플리케이션의 Chaos Monkey Actuator endpoint를 사용한다.
 
@@ -214,7 +609,7 @@ HTTP/1.1 200
 
 ---
 
-## 8. LitmusChaos Spring Boot App Kill 실행
+## 9. LitmusChaos Spring Boot App Kill 실행
 
 사용한 ChaosEngine은 다음과 같다.
 
@@ -271,7 +666,7 @@ spring-boot-app-kill-0iezl6-s8ljm   0/1   Completed
 
 ---
 
-## 9. 실험 로그
+## 10. 실험 로그
 
 Experiment Pod 로그를 확인했다.
 
@@ -313,7 +708,7 @@ Post "http://10.244.0.20:8080/actuator/chaosmonkey/assaults/runtime/attack": EOF
 
 ---
 
-## 10. 실험 결과
+## 11. 실험 결과
 
 가장 중요한 결과는 대상 Spring Boot Pod의 `RESTARTS` 값이 증가했다는 점이다.
 
@@ -341,7 +736,7 @@ spring-boot-demo-5ff77f5cb-z6brf   1/1     Running   1 (2m46s ago)   9m31s
 
 ---
 
-## 11. App Kill에서 RESTARTS가 중요한 이유
+## 12. App Kill에서 RESTARTS가 중요한 이유
 
 `spring-boot-app-kill`은 Pod 자체를 삭제하는 실험이 아니다.
 
@@ -369,7 +764,7 @@ Pod의 RESTARTS 값 증가
 
 ---
 
-## 12. Service 관점의 해석
+## 13. Service 관점의 해석
 
 이번 실험에서는 Spring Boot Pod를 2개로 구성했다.
 
@@ -392,7 +787,7 @@ spring-boot-demo-5ff77f5cb-z6brf   Running   RESTARTS 1
 
 ---
 
-## 13. Graceful Shutdown과의 관계
+## 14. Graceful Shutdown과의 관계
 
 이번 App Kill 실험의 직접적인 관찰 지표는 `RESTARTS` 증가였다.
 
@@ -436,7 +831,7 @@ spring:
 
 ---
 
-## 14. KB국민은행 KBaaS 사례와의 연결
+## 15. KB국민은행 KBaaS 사례와의 연결
 
 KB국민은행 KBaaS 사례에서 중요한 주제는 **금융 API 인프라의 안정성과 확장성**이었다.
 
@@ -479,7 +874,7 @@ Service가 정상 인스턴스로 트래픽을 전달할 수 있는가?
 
 ---
 
-## 15. 트러블슈팅 과정
+## 16. 트러블슈팅 과정
 
 이번 실험에서는 여러 문제를 순차적으로 해결했다.
 
@@ -496,7 +891,7 @@ Service가 정상 인스턴스로 트래픽을 전달할 수 있는가?
 
 ---
 
-## 16. 최종 결론
+## 17. 최종 결론
 
 이번 실험에서는 LitmusChaos의 `spring-boot-app-kill`을 사용하여 Spring Boot 애플리케이션 종료 상황을 주입했다.
 
