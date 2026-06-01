@@ -1,0 +1,30 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: dns-error-chaos
+  namespace: chaos-demo
+spec:
+  appinfo:
+    appns: chaos-demo
+    applabel: "app=dns-client"
+    appkind: deployment
+  annotationCheck: "true"
+  engineState: active
+  chaosServiceAccount: chaos-sa
+  experiments:
+    - name: pod-dns-error
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: TARGET_HOSTNAMES
+              value: "web.chaos-demo.svc.cluster.local"
+            - name: MATCH_SCHEME
+              value: "exact"
+            - name: PODS_AFFECTED_PERC
+              value: "100"
+            - name: CONTAINER_RUNTIME
+              value: "containerd"
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"
