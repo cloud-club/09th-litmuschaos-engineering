@@ -1,0 +1,29 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: spring-boot-app-kill-chaos
+  namespace: default
+spec:
+  engineState: active
+  annotationCheck: "false"
+  appinfo:
+    appns: default
+    applabel: "app=spring-boot-demo"
+    appkind: deployment
+  chaosServiceAccount: spring-boot-app-kill-sa
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: spring-boot-app-kill
+      spec:
+        components:
+          env:
+            - name: CM_PORT
+              value: "8080"
+            - name: CM_LEVEL
+              value: "1"
+            - name: CM_WATCHERS
+              value: "restController"
+            - name: PODS_AFFECTED_PERC
+              value: "50"
+            - name: SEQUENCE
+              value: "serial"
