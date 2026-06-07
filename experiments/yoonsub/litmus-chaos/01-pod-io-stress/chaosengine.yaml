@@ -10,7 +10,7 @@ spec:
     appkind: deployment
   chaosServiceAccount: pod-io-stress-sa
   monitoring: false
-  jobCleanUpPolicy: delete
+  jobCleanUpPolicy: retain
   experiments:
     - name: pod-io-stress
       spec:
@@ -25,9 +25,9 @@ spec:
             # I/O 부하를 발생시킬 워커 수
             - name: NUMBER_OF_WORKERS
               value: "4"
-            # minikube 컨테이너 런타임
+            # minikube docker driver 환경에서는 docker가 실제 CRI
             - name: CONTAINER_RUNTIME
-              value: "containerd"
-            # containerd 소켓 경로
+              value: "docker"
+            # Docker 소켓 경로
             - name: SOCKET_PATH
-              value: "/run/containerd/containerd.sock"
+              value: "/var/run/docker.sock"
