@@ -1,0 +1,32 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: ai-server-latency-chaos
+  namespace: app-demo
+spec:
+  appinfo:
+    appns: app-demo
+    applabel: "app=ai-server"
+    appkind: deployment
+  annotationCheck: "false"
+  engineState: active
+  chaosServiceAccount: chaos-sa
+  experiments:
+    - name: pod-network-latency
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"
+            - name: NETWORK_INTERFACE
+              value: "eth0"
+            - name: NETWORK_LATENCY
+              value: "3000"
+            - name: JITTER
+              value: "500"
+            - name: PODS_AFFECTED_PERC
+              value: "100"
+            - name: CONTAINER_RUNTIME
+              value: "containerd"
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"
