@@ -1,0 +1,2 @@
+NAME                                 READY   STATUS    RESTARTS   AGE     IP           NODE               NOMINATED NODE   READINESS GATES
+chaos-operator-ce-75767d49b7-6l7xv   1/1     Running   0          3m43s   10.244.0.7   codex-ai-latency   <none>           <none>

@@ -1,0 +1,17 @@
+NAME                         READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES             SELECTOR
+deployment.apps/ai-server    2/2     2            2           4m     ai-server    ai-server:local    app=ai-server
+deployment.apps/spring-api   2/2     2            2           4m2s   spring-api   spring-api:local   app=spring-api
+
+NAME                              READY   STATUS    RESTARTS   AGE    IP           NODE               NOMINATED NODE   READINESS GATES
+pod/ai-server-7586c4f6b-dwmr9     1/1     Running   0          18s    10.244.0.9   codex-ai-latency   <none>           <none>
+pod/ai-server-7586c4f6b-wb62h     1/1     Running   0          25s    10.244.0.8   codex-ai-latency   <none>           <none>
+pod/spring-api-7d58d4dd66-8r79g   1/1     Running   0          4m2s   10.244.0.4   codex-ai-latency   <none>           <none>
+pod/spring-api-7d58d4dd66-pb8qb   1/1     Running   0          4m2s   10.244.0.3   codex-ai-latency   <none>           <none>
+
+NAME                     TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE    SELECTOR
+service/ai-server-svc    ClusterIP   10.97.246.241   <none>        8000/TCP         4m     app=ai-server
+service/spring-api-svc   NodePort    10.97.180.227   <none>        8080:31882/TCP   4m2s   app=spring-api
+
+NAME                                                  ADDRESSTYPE   PORTS   ENDPOINTS               AGE
+endpointslice.discovery.k8s.io/ai-server-svc-qbxg6    IPv4          8000    10.244.0.8,10.244.0.9   4m
+endpointslice.discovery.k8s.io/spring-api-svc-6r886   IPv4          8080    10.244.0.4,10.244.0.3   4m2s
