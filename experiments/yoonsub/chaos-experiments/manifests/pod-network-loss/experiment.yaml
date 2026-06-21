@@ -1,0 +1,79 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: pod-network-loss
+  namespace: default
+  labels:
+    name: pod-network-loss
+    app.kubernetes.io/part-of: litmus
+    app.kubernetes.io/component: chaosexperiment
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["create", "delete", "get", "list", "patch", "update", "deletecollection"]
+      - apiGroups: [""]
+        resources: ["events"]
+        verbs: ["create", "get", "list", "patch", "update"]
+      - apiGroups: [""]
+        resources: ["configmaps"]
+        verbs: ["get", "list"]
+      - apiGroups: [""]
+        resources: ["pods/log"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: [""]
+        resources: ["pods/exec"]
+        verbs: ["get", "list", "create"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
+        verbs: ["list", "get"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "list", "get", "delete", "deletecollection"]
+      - apiGroups: ["litmuschaos.io"]
+        resources: ["chaosengines", "chaosexperiments", "chaosresults"]
+        verbs: ["create", "list", "get", "patch", "update", "delete"]
+    image: "litmuschaos/go-runner:latest"
+    imagePullPolicy: Always
+    args:
+      - -c
+      - ./experiments -name pod-network-loss
+    command:
+      - /bin/bash
+    env:
+      - name: TARGET_CONTAINER
+        value: ""
+      - name: LIB_IMAGE
+        value: "litmuschaos/go-runner:latest"
+      - name: NETWORK_INTERFACE
+        value: "eth0"
+      - name: TC_IMAGE
+        value: "gaiadocker/iproute2"
+      - name: NETWORK_PACKET_LOSS_PERCENTAGE
+        value: "100"
+      - name: TOTAL_CHAOS_DURATION
+        value: "60"
+      - name: RAMP_TIME
+        value: "0"
+      - name: PODS_AFFECTED_PERC
+        value: "0"
+      - name: DEFAULT_HEALTH_CHECK
+        value: "false"
+      - name: TARGET_PODS
+        value: ""
+      - name: SEQUENCE
+        value: "parallel"
+      - name: DESTINATION_IPS
+        value: ""
+      - name: DESTINATION_HOSTS
+        value: ""
+      - name: CONTAINER_RUNTIME
+        value: "containerd"
+      - name: SOCKET_PATH
+        value: "/run/containerd/containerd.sock"
+    labels:
+      name: pod-network-loss
+      app.kubernetes.io/part-of: litmus
+      app.kubernetes.io/component: experiment-job
