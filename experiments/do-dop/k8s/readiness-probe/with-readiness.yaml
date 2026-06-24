@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probe-demo-with-readiness
+  namespace: probe-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: probe-demo-with-readiness
+  template:
+    metadata:
+      labels:
+        app: probe-demo-with-readiness
+    spec:
+      containers:
+        - name: app
+          image: probe-demo:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5  # 컨테이너 시작 5초 후부터 /ready 검사
+            periodSeconds: 5        # 5초마다 검사
+            failureThreshold: 10    # 초기화 중 NotReady 상태를 충분히 허용
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-demo-with-readiness
+  namespace: probe-lab
+spec:
+  selector:
+    app: probe-demo-with-readiness
+  ports:
+    - port: 80
+      targetPort: 8080
